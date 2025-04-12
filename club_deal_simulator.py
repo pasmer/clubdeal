@@ -145,13 +145,13 @@ page = """
 <|{ebitda_target}|input|label="Target EBITDA (M€)"|class_name=fullwidth|>
 <br/>
 **Mult. EV/EBITDA Ingresso:**<br/>
-<|{ev_multiple_entry}|slider|min=4|max=12|step=0.5|continuous=false|> <|{int(ev_multiple_entry) if ev_multiple_entry.is_integer() else ev_multiple_entry}|>x
+<|{ev_multiple_entry}|slider|min=4|max=12|step=0.5|continuous=false|> <|{ev_multiple_entry}|>x
 <br/>
 **Quota Acquisita (%):**<br/>
 <|{acquisition_percentage}|slider|min=10|max=100|step=5|continuous=false|> <|{int(acquisition_percentage)}|>%
 <br/>
 **Mult. Debito/EBITDA Ingresso:**<br/>
-<|{debt_multiple_entry}|slider|min=0|max=6|step=0.5|continuous=false|> <|{int(debt_multiple_entry) if debt_multiple_entry.is_integer() else debt_multiple_entry}|>x
+<|{debt_multiple_entry}|slider|min=0|max=6|step=0.5|continuous=false|> <|{debt_multiple_entry}|>x
 <br/>
 **Costi Transazione (% EV):**<br/>
 <|{transaction_costs_percentage}|slider|min=0|max=5|step=0.5|continuous=false|> <|{transaction_costs_percentage}|>%
@@ -166,7 +166,7 @@ page = """
 <|{ebitda_exit}|input|label="EBITDA alla Exit (M€)"|class_name=fullwidth|>
 <br/>
 **Mult. EV/EBITDA Uscita:**<br/>
-<|{ev_multiple_exit}|slider|min=4|max=12|step=0.5|continuous=false|> <|{int(ev_multiple_exit) if ev_multiple_exit.is_integer() else ev_multiple_exit}|>x
+<|{ev_multiple_exit}|slider|min=4|max=12|step=0.5|continuous=false|> <|{ev_multiple_exit}|>x
 <br/>
 **Debito Netto alla Exit (M€):**<br/>
 <|{net_debt_exit}|input|label="Debito Netto alla Exit (M€)"|class_name=fullwidth|>
