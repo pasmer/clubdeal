@@ -37,17 +37,30 @@ carried_interest_amount = 0.0
 investor_total_return = 0.0
 investor_moic = 0.0
 
+# ... (altre variabili di stato) ...
+
+# Nuove variabili per le etichette dinamiche nei risultati
+label_equity_per_quota = f"Equity per Quota ({int(acquisition_percentage)}%):"
+label_proventi_lordi = f"Proventi Lordi Club ({int(acquisition_percentage)}%):"
+
+# ... (resto delle variabili di stato) ...
+
 # --- Funzione di Calcolo ---
 def calculate_deal_metrics(state):
     print("Calculating metrics...")
     try:
+        # === AGGIUNGI QUESTE RIGHE ===
+        # Aggiorna le etichette dinamiche basate sulla percentuale corrente
+        state.label_equity_per_quota = f"Equity per Quota ({int(state.acquisition_percentage)}%):"
+        state.label_proventi_lordi = f"Proventi Lordi Club ({int(state.acquisition_percentage)}%):"
+        # ============================
+
         # Calcoli all'Entrata
         state.ev_entry = state.ebitda_target * state.ev_multiple_entry
         state.debt_entry = state.ebitda_target * state.debt_multiple_entry
         state.equity_value_entry = state.ev_entry - state.debt_entry
         state.equity_needed_for_stake = state.equity_value_entry * (state.acquisition_percentage / 100.0)
         state.transaction_costs_value = state.ev_entry * (state.transaction_costs_percentage / 100.0)
-        # Equity totale = Equity per la quota + Costi transazione
         state.total_equity_required = state.equity_needed_for_stake + state.transaction_costs_value
 
         # Calcoli all'Uscita
@@ -57,32 +70,63 @@ def calculate_deal_metrics(state):
 
         # Calcoli Waterfall e Carry
         hurdle_rate = state.hurdle_rate_percentage / 100.0
-        capital_invested = state.total_equity_required
+        capital_invested = state.total_equity_required # Assumiamo costi coperti da equity
 
-        # Return of Capital (implicito nel calcolo dei profitti)
+        # Gestione caso capitale investito = 0 per evitare divisioni per zero
+        if capital_invested <= 0:
+             state.preferred_return_amount = 0.0
+             state.carried_interest_amount = 0.0
+             state.investor_total_return = 0.0
+             state.investor_moic = 0.0
+             print("Capital invested is zero or negative. Results set to 0.")
+             return # Esce dalla funzione se non c'è capitale
+
         # Preferred Return
-        preferred_return_amount = capital_invested * (math.pow(1 + hurdle_rate, state.holding_period_years) - 1)
-        state.preferred_return_amount = preferred_return_amount
+        calculated_pref = capital_invested * (math.pow(1 + hurdle_rate, state.holding_period_years) - 1)
+        state.preferred_return_amount = calculated_pref
 
-        total_profit = max(0, state.club_proceeds_exit - capital_invested - preferred_return_amount)
+        # Profitto disponibile per la divisione carry (dopo RoC e Pref)
+        # Assicurati che i proventi siano sufficienti per RoC + Pref
+        profit_after_roc_pref = state.club_proceeds_exit - capital_invested - state.preferred_return_amount
+        profit_for_carry_split = max(0, profit_after_roc_pref)
 
         # Carried Interest
-        carried_interest_amount = total_profit * (state.carried_interest_percentage / 100.0)
-        state.carried_interest_amount = carried_interest_amount
+        calculated_carry = profit_for_carry_split * (state.carried_interest_percentage / 100.0)
+        state.carried_interest_amount = calculated_carry
 
         # Ritorno Investitori
-        investor_share_of_profit = total_profit * (1 - (state.carried_interest_percentage / 100.0))
-        investor_total_return = capital_invested + preferred_return_amount + investor_share_of_profit
-        state.investor_total_return = min(investor_total_return, state.club_proceeds_exit)
+        investor_share_profit_after_pref = profit_for_carry_split * (1 - (state.carried_interest_percentage / 100.0))
+
+        # Calcolo teorico: Capitale + Pref + Quota Profitto
+        calculated_total_return = capital_invested + state.preferred_return_amount + investor_share_profit_after_pref
+
+        # Applica il cap: Gli investitori non possono ricevere più dei proventi totali generati dalla loro quota
+        final_investor_return = min(calculated_total_return, state.club_proceeds_exit)
+        # Caso limite: Se i proventi non coprono neanche il capitale, l'investitore riceve solo i proventi
+        final_investor_return = max(0, final_investor_return) # Assicura che non sia negativo
+
+        state.investor_total_return = final_investor_return # Assegnazione finale
 
         # MoIC Investitori
         if capital_invested > 0:
-            moic_investitori = investor_total_return / capital_invested
-            state.investor_moic = moic_investitori
+             final_moic = final_investor_return / capital_invested
+             state.investor_moic = final_moic # Assegnazione finale
+        else:
+             state.investor_moic = 0.0 # Già gestito sopra, ma ridondante per sicurezza
+
+        print(f"Calculated Investor Total Return: {state.investor_total_return}")
+        print(f"Calculated MoIC: {state.investor_moic}")
+        gui.notify(state, "success", "Calcoli completati!")
 
     except Exception as e:
         print(f"Errore nel calcolo: {e}")
-
+        # Resetta i risultati a 0 in caso di errore per evitare valori fuorvianti
+        state.preferred_return_amount = 0.0
+        state.carried_interest_amount = 0.0
+        state.investor_total_return = 0.0
+        state.investor_moic = 0.0
+        gui.notify(state, "error", f"Errore nel calcolo: {e}")
+        
 # --- Definizione Pagina HTML/Markdown con Taipy ---
 # Usiamo Markdown esteso di Taipy per creare l'interfaccia
 # <|{variable}|component_type|properties...|>
@@ -147,28 +191,38 @@ page = """
 <|layout|columns=1 1|gap=1.5rem|
 <|part id=results1_card class_name="card card-bg"|
 ### Fabbisogno di Equity {: .h5 .mt-0 .mb-2}
-**Enterprise Value Ingresso:** <|{ev_entry}|text|format=%.2f M€|>
-**Debito Ingresso:** <|{debt_entry}|text|format=%.2f M€|>
-**Equity Value Totale Ingresso:** <|{equity_value_entry}|text|format=%.2f M€|>
-**Equity per Quota ({int(acquisition_percentage)}%):** <|{equity_needed_for_stake}|text|format=%.2f M€|>
-**Costi Transazione:** <|{transaction_costs_value}|text|format=%.2f M€|>
-**==> Fabbisogno Totale Equity:** <|{total_equity_required}|text|format=%.2f M€|raw|>
+**Enterprise Value Ingresso:**<br/><|{ev_entry}|text|format=%.2f M€|>
+<br/>
+**Debito Ingresso:**<br/><|{debt_entry}|text|format=%.2f M€|>
+<br/>
+**Equity Value Totale Ingresso:**<br/><|{equity_value_entry}|text|format=%.2f M€|>
+<br/>
+**<|{label_equity_per_quota}|text|raw|>**<br/><|{equity_needed_for_stake}|text|format=%.2f M€|>
+<br/>
+**Costi Transazione:**<br/><|{transaction_costs_value}|text|format=%.2f M€|>
+<br/>
+**==> Fabbisogno Totale Equity:**<br/><|{total_equity_required}|text|format=%.2f M€|raw|>
 |>
 
 <|part id=results2_card class_name="card card-bg"|
 ### Ritorno & Carried Interest {: .h5 .mt-0 .mb-2}
-**Enterprise Value Uscita:** <|{ev_exit}|text|format=%.2f M€|>
-**Equity Value Totale Uscita:** <|{equity_value_exit}|text|format=%.2f M€|>
-**Proventi Lordi Club ({int(acquisition_percentage)}%):** <|{club_proceeds_exit}|text|format=%.2f M€|>
-**Ritorno Preferenziale Investitori:** <|{preferred_return_amount}|text|format=%.2f M€|>
-**==> Carried Interest Promotore:** <|{carried_interest_amount}|text|format=%.2f M€|raw|>
-**Ritorno Totale Investitori:** <|{investor_total_return}|text|format=%.2f M€|>
-**MoIC Investitori:** <|{investor_moic}|text|format=%.2f x|>
+**Enterprise Value Uscita:**<br/><|{ev_exit}|text|format=%.2f M€|>
+<br/>
+**Equity Value Totale Uscita:**<br/><|{equity_value_exit}|text|format=%.2f M€|>
+<br/>
+**<|{label_proventi_lordi}|text|raw|>**<br/><|{club_proceeds_exit}|text|format=%.2f M€|>
+<br/>
+**Ritorno Preferenziale Investitori:**<br/><|{preferred_return_amount}|text|format=%.2f M€|>
+<br/>
+**==> Carried Interest Promotore:**<br/><|{carried_interest_amount}|text|format=%.2f M€|raw|>
+<br/>
+**Ritorno Totale Investitori:**<br/><|{investor_total_return}|text|format=%.2f M€|>
+<br/>
+**MoIC Investitori:**<br/><|{investor_moic}|text|format=%.2f x|>
 |>
 |>
 
 """
-
 # --- Avvio dell'Applicazione ---
 if __name__ == "__main__":
     # Calcola i valori iniziali al caricamento
