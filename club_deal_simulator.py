@@ -49,11 +49,15 @@ label_proventi_lordi = f"Proventi Lordi Club ({int(acquisition_percentage)}%):"
 def calculate_deal_metrics(state):
     print("Calculating metrics...")
     try:
-        # === AGGIUNGI QUESTE RIGHE ===
+        # Conversione dei valori input in float/int
+        state.ebitda_target = float(state.ebitda_target)
+        state.ebitda_exit = float(state.ebitda_exit)
+        state.net_debt_exit = float(state.net_debt_exit)
+        state.holding_period_years = int(state.holding_period_years)
+        
         # Aggiorna le etichette dinamiche basate sulla percentuale corrente
         state.label_equity_per_quota = f"Equity per Quota ({int(state.acquisition_percentage)}%):"
         state.label_proventi_lordi = f"Proventi Lordi Club ({int(state.acquisition_percentage)}%):"
-        # ============================
 
         # Calcoli all'Entrata
         state.ev_entry = state.ebitda_target * state.ev_multiple_entry
